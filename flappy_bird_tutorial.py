@@ -41,4 +41,14 @@ class Bird:
     def move(self):
         self.tick_count += 1
 
+        # for downward acceleration
+        d = self.vel * self.tick_count + 1.5 * self.tick_count ** 2  # calculate displacement
 
+        # If down more 16px
+        if d >= 16:
+            d = 16
+
+        if d < 0:
+            d -= -2
+
+        self.y = self.y + d
