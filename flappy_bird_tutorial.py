@@ -104,7 +104,6 @@ class Pipe:
         """
         initialize pipe object
         :param x: int
-        :param y: int
         :return" None
         """
         self.x = x
@@ -223,33 +222,44 @@ def draw_window(win, bird: Bird, pipes, base, score):
     pygame.display.update()
 
 
-def main():
-    bird = Bird(230, 350)
+def main(genomes, config):
+    nets = []
+    ge = []
+    birds = []
+
+    for g in genomes:
+        net = neat.nn.FeedForwardNetwork(g, config)
+        nets.append(net)
+        birds.append(Bird(Bird(239,550)))
+
+
+
+
     base = Base(730)
     pipes = [Pipe(600)]
     win = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
-    run = True
+    game_run = True
     clock = pygame.time.Clock()
     score = 0
 
-    while run:
+    while game_run:
         clock.tick(30)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                run = False
+                game_run = False
 
         add_pipe = False
         rem = []
         for pipe in pipes:
-            if pipe.collide(bird):
-                pass
+            for bird in birds:
+                if pipe.collide(bird):
+                    pass
+                if not pipe.passed and pipe.x < bird.x:
+                    pipe.passed = True
+                    add_pipe = True
 
             if pipe.x + pipe.PIPE_TOP.get_width() < 0:
                 rem.append(pipe)
-
-            if not pipe.passed and pipe.x < bird.x:
-                pipe.passed = True
-                add_pipe = True
 
             pipe.move()
 
@@ -260,8 +270,9 @@ def main():
         for r in rem:
             pipes.remove(r)
 
-        if bird.y + bird.img.get_height() >= 730:
-            pass
+        for bird in birds:
+            if bird.y + bird.img.get_height() >= 730:
+                pass
 
         base.move()
         draw_window(win, bird, pipes, base, score)
@@ -271,3 +282,31 @@ def main():
 
 
 main()
+
+
+def run(config_path):
+    """
+    runs the NEAT algorithm to train a neural network to play flappy bird.
+    :param config_path: location of config file
+    :return: None
+    """
+
+    # Create the population, which is the top-level object for a NEAT run.
+    config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                                neat.DefaultSpeciesSet, neat.DefaultStagnation,
+                                config_path)
+    p = neat.Population(config)
+
+    # Add a stdout reporter to show progress in the terminal.
+    p.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    p.add_reporter(stats)
+
+    # Run for up to 50 generations.
+    winner = p.run(main(), 50)
+
+
+if __name__ == '__main__':
+    local_dir = os.path.dirname(__file__)
+    _config_path = os.path.join(local_dir, 'config-feedforward.txt')
+    run(_config_path)
