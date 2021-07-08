@@ -208,7 +208,7 @@ class Base:
         win.blit(self.IMG, (self.x2, self.y))
 
 
-def draw_window(win, bird: Bird, pipes, base, score):
+def draw_window(win, birds, pipes, base, score):
     win.blit(BG_IMG, (0, 0))
 
     for pipe in pipes:
@@ -218,22 +218,26 @@ def draw_window(win, bird: Bird, pipes, base, score):
     win.blit(text, (WIN_WIDTH - 10 - text.get_width(), 10))
 
     base.draw(win)
-    bird.draw(win)
+    for bird in birds:
+        bird.draw(win)
+
     pygame.display.update()
 
 
 def main(genomes, config):
+    # start by creating lists holding the genome itself, the
+    # neural network associated with the genome and the
+    # bird object that uses that network to play
     nets = []
     ge = []
     birds = []
 
-    for g in genomes:
-        net = neat.nn.FeedForwardNetwork(g, config)
+    for _, genome in genomes:
+        net = neat.nn.FeedForwardNetwork.create(genome, config)
         nets.append(net)
-        birds.append(Bird(Bird(239,550)))
-
-
-
+        birds.append(Bird(230, 350))
+        genome.fitness = 0  # start with fitness level of 0
+        ge.append(genome)
 
     base = Base(730)
     pipes = [Pipe(600)]
@@ -247,13 +251,44 @@ def main(genomes, config):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 game_run = False
+                pygame.quit()
+                quit()
+
+        pipe_ind = 0
+        if len(birds) > 0:
+            # determine whether to use the first or second
+            if len(pipes) > 1 and birds[0].x > pipes[0].x + pipes[0].PIPE_TOP.get_width():
+                # pipe on the screen for neural network input
+                pipe_ind = 1
+        else:
+            game_run = False
+            break
+
+        for x, bird in enumerate(birds):
+            bird.move()
+
+            # give each bird a fitness of 0.1 for each frame it stays alive
+            ge[x].fitness += 0.1
+
+            # send bird location, top pipe location and bottom pipe location and determine from network whether to
+            # jump or not
+            output = nets[birds.index(bird)].activate(
+                (bird.y, abs(bird.y - pipes[pipe_ind].height), abs(bird.y - pipes[pipe_ind].bottom)))
+
+            # we use a tanh activation function so result will be between -1 and 1. if over 0.5 jump
+            if output[0] > 0.5:
+                bird.jump()
 
         add_pipe = False
         rem = []
         for pipe in pipes:
-            for bird in birds:
+            for x, bird in enumerate(birds):
                 if pipe.collide(bird):
-                    pass
+                    ge[x].fitness -= 1
+                    birds.pop(x)
+                    nets.pop(x)
+                    ge.pop(x)
+
                 if not pipe.passed and pipe.x < bird.x:
                     pipe.passed = True
                     add_pipe = True
@@ -265,23 +300,22 @@ def main(genomes, config):
 
         if add_pipe:
             score += 1
+            # can add this line to give more reward for passing through a pipe (not required)
+            for g in ge:
+                g.fitness += 5
             pipes.append(Pipe(600))
 
         for r in rem:
             pipes.remove(r)
 
-        for bird in birds:
-            if bird.y + bird.img.get_height() >= 730:
-                pass
+        for x, bird in enumerate(birds):
+            if bird.y + bird.img.get_height() >= 730 or bird.y < 0:
+                birds.pop(x)
+                nets.pop(x)
+                ge.pop(x)
 
         base.move()
-        draw_window(win, bird, pipes, base, score)
-
-    pygame.quit()
-    quit()
-
-
-main()
+        draw_window(win, birds, pipes, base, score)
 
 
 def run(config_path):
@@ -303,10 +337,13 @@ def run(config_path):
     p.add_reporter(stats)
 
     # Run for up to 50 generations.
-    winner = p.run(main(), 50)
+    winner = p.run(main, 50)
 
 
 if __name__ == '__main__':
+    # Determine path to configuration file. This path manipulation is
+    # here so that the script will run successfully regardless of the
+    # current working directory.
     local_dir = os.path.dirname(__file__)
-    _config_path = os.path.join(local_dir, 'config-feedforward.txt')
-    run(_config_path)
+    config_path = os.path.join(local_dir, 'config-feedforward.txt')
+    run(config_path)
